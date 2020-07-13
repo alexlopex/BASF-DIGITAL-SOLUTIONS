@@ -1,0 +1,270 @@
+*&---------------------------------------------------------------------*
+*& Report  YTEST_ALV
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+REPORT ytest_ALV.
+
+CONSTANTS: c_x            TYPE char1 VALUE 'X'.
+
+TYPES: BEGIN OF ty_query,
+         name       TYPE /basf/employee-name,
+         lastname   TYPE /basf/employee-lastname,
+         department TYPE /basf/departments-department,
+         floor      TYPE /basf/locations-floor,
+         area       TYPE /basf/locations-area,
+         officename TYPE /basf/locations-officename,
+       END OF ty_query.
+
+DATA: lv_query_fields TYPE string,
+      lv_query_tables TYPE string,
+      lv_employee,
+      lv_departments,
+      lv_locations,
+      lc_title        TYPE string VALUE 'Selection Parameters',
+      lc_query_error  TYPE string VALUE 'No Data Found',
+      lv_msg          TYPE string.
+
+DATA: lt_query TYPE STANDARD TABLE OF ty_query,
+      ls_query LIKE LINE OF lt_query.
+
+DATA: go_alv            TYPE REF TO cl_salv_table,
+      lr_layout         TYPE REF TO cl_salv_layout,
+      lo_msg            TYPE REF TO cx_salv_msg,
+      lo_columns        TYPE REF TO cl_salv_columns_table,
+      lo_column         TYPE REF TO cl_salv_column_table,
+      ls_key            TYPE salv_s_layout_key,
+      lo_salv_not_found TYPE REF TO cx_salv_not_found,
+      toolbar           TYPE REF TO cl_salv_functions_list.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE lv_frame.
+PARAMETERS: p_name   AS CHECKBOX, "Name
+            p_lname  AS CHECKBOX, "Lastname
+            p_dept   AS CHECKBOX, "Department
+            p_ofloor AS CHECKBOX, "Office Floor
+            p_oarea  AS CHECKBOX, "Office Area
+            p_oname  AS CHECKBOX. "Office Name
+SELECTION-SCREEN END OF BLOCK b1.
+
+AT SELECTION-SCREEN OUTPUT.
+  IF lv_frame IS INITIAL.
+    lv_frame = lc_title.
+  ENDIF.
+
+START-OF-SELECTION.
+  CLEAR: lv_query_fields,
+         lv_query_tables.
+
+  IF p_name IS NOT INITIAL.
+    lv_query_fields = 'NAME'.
+    lv_employee = c_x.
+  ENDIF.
+
+  IF p_lname IS NOT INITIAL AND lv_query_fields IS INITIAL.
+    lv_query_fields = 'LASTNAME'.
+    lv_employee = c_x.
+  ELSEIF p_lname IS NOT INITIAL AND lv_query_fields IS NOT INITIAL.
+    CONCATENATE lv_query_fields
+                ','
+                'LASTNAME'
+                INTO lv_query_fields SEPARATED BY space.
+    lv_employee = c_x.
+  ENDIF.
+
+  IF p_dept IS NOT INITIAL AND lv_query_fields IS INITIAL.
+    lv_query_fields = 'DEPARTMENT'.
+    lv_departments = c_x.
+  ELSEIF p_dept IS NOT INITIAL AND lv_query_fields IS NOT INITIAL.
+    CONCATENATE lv_query_fields
+                ','
+                'DEPARTMENT'
+                INTO lv_query_fields SEPARATED BY space.
+    lv_departments = c_x.
+  ENDIF.
+
+  IF p_ofloor IS NOT INITIAL AND lv_query_fields IS INITIAL.
+    lv_query_fields = 'FLOOR'.
+    lv_locations = c_x.
+  ELSEIF p_ofloor IS NOT INITIAL AND lv_query_fields IS NOT INITIAL.
+    CONCATENATE lv_query_fields
+                ','
+                'FLOOR'
+                INTO lv_query_fields SEPARATED BY space.
+    lv_locations = c_x.
+  ENDIF.
+
+  IF p_oarea IS NOT INITIAL AND lv_query_fields IS INITIAL.
+    lv_query_fields = 'AREA'.
+    lv_locations = c_x.
+  ELSEIF p_oarea IS NOT INITIAL AND lv_query_fields IS NOT INITIAL.
+    CONCATENATE lv_query_fields
+                ','
+                'AREA'
+                INTO lv_query_fields SEPARATED BY space.
+    lv_locations = c_x.
+  ENDIF.
+
+  IF p_oname IS NOT INITIAL AND lv_query_fields IS INITIAL.
+    lv_query_fields = 'OFFICENAME'.
+    lv_locations = c_x.
+  ELSEIF p_oname IS NOT INITIAL AND lv_query_fields IS NOT INITIAL.
+    CONCATENATE lv_query_fields
+                ','
+                'OFFICENAME'
+                INTO lv_query_fields SEPARATED BY space.
+    lv_locations = c_x.
+  ENDIF.
+
+  IF lv_employee IS NOT INITIAL.
+    lv_query_tables = '/BASF/EMPLOYEE'.
+  ENDIF.
+
+  IF lv_departments IS NOT INITIAL AND lv_query_tables IS INITIAL.
+    lv_query_tables = '/BASF/DEPARTMENTS'.
+  ELSEIF lv_departments IS NOT INITIAL AND lv_query_tables IS NOT INITIAL.
+    CONCATENATE lv_query_tables
+                'INNER JOIN'
+                '/BASF/DEPARTMENTS'
+                'ON /BASF/EMPLOYEE~DEPARTMENTID = /BASF/DEPARTMENTS~ID'
+                INTO lv_query_tables SEPARATED BY space.
+  ENDIF.
+
+  IF lv_locations IS NOT INITIAL AND lv_query_tables IS INITIAL.
+    lv_query_tables = '/BASF/LOCATIONS'.
+  ELSEIF lv_locations IS NOT INITIAL AND lv_query_tables IS NOT INITIAL.
+    IF lv_departments IS NOT INITIAL.
+      CONCATENATE lv_query_tables
+                  'INNER JOIN'
+                  '/BASF/LOCATIONS'
+                  'ON /BASF/EMPLOYEE~LOCATIONID = /BASF/LOCATIONS~LOCATIONID'
+                  INTO lv_query_tables SEPARATED BY space.
+    ELSE.
+      CONCATENATE lv_query_tables
+                  'INNER JOIN'
+                  '/BASF/DEPARTMENTS'
+                  'ON /BASF/EMPLOYEE~DEPARTMENTID = /BASF/DEPARTMENTS~ID'
+                  INTO lv_query_tables SEPARATED BY space.
+      CONCATENATE lv_query_tables
+                  'INNER JOIN'
+                  '/BASF/LOCATIONS'
+                  'ON /BASF/EMPLOYEE~LOCATIONID = /BASF/LOCATIONS~LOCATIONID'
+                  INTO lv_query_tables SEPARATED BY space.
+    ENDIF.
+  ENDIF.
+
+  SELECT
+    (lv_query_fields)
+  INTO CORRESPONDING FIELDS OF TABLE
+    lt_query
+  FROM
+    (lv_query_tables).
+
+  IF sy-subrc <> 0.
+    MESSAGE lc_query_error TYPE 'E'.
+    LEAVE LIST-PROCESSING.
+  ENDIF.
+
+  TRY.
+      cl_salv_table=>factory(
+        IMPORTING
+          r_salv_table = go_alv
+        CHANGING
+          t_table      = lt_query ).
+    CATCH cx_salv_msg INTO lo_msg.
+      MESSAGE lo_msg TYPE 'E'.
+      LEAVE LIST-PROCESSING.
+  ENDTRY.
+
+  toolbar = go_alv->get_functions( ) .
+  toolbar->set_all(
+    value  = if_salv_c_bool_sap=>true ).
+  lo_columns = go_alv->get_columns( ).
+  lo_columns->set_optimize( ).
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'NAME' ).
+      lo_column->set_long_text( value = 'NAME' ).
+      lo_column->set_medium_text( value = 'NAME' ).
+      lo_column->set_short_text( value = 'NAME' ).
+      IF p_name IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'LASTNAME' ).
+      lo_column->set_long_text( value = 'LASTNAME' ).
+      lo_column->set_medium_text( value = 'LASTNAME' ).
+      lo_column->set_short_text( value = 'LASTNAME' ).
+      IF p_lname IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'DEPARTMENT' ).
+      lo_column->set_long_text( value = 'DEPARTMENT' ).
+      lo_column->set_medium_text( value = 'DEPARTMENT' ).
+      lo_column->set_short_text( value = 'DEPARTMENT' ).
+      IF p_dept IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'FLOOR' ).
+      lo_column->set_long_text( value = 'FLOOR' ).
+      lo_column->set_medium_text( value = 'FLOOR' ).
+      lo_column->set_short_text( value = 'FLOOR' ).
+      IF p_ofloor IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'AREA' ).
+      lo_column->set_long_text( value = 'AREA' ).
+      lo_column->set_medium_text( value = 'AREA' ).
+      lo_column->set_short_text( value = 'AREA' ).
+      IF p_oarea IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  TRY.
+      lo_column ?= lo_columns->get_column( 'OFFICENAME' ).
+      lo_column->set_long_text( value = 'OFFICENAME' ).
+      lo_column->set_medium_text( value = 'OFFICENAME' ).
+      lo_column->set_short_text( value = 'OFFICENAME' ).
+      IF p_oname IS INITIAL.
+        lo_column->set_visible( value  = if_salv_c_bool_sap=>false ).
+      ENDIF.
+    CATCH cx_salv_not_found INTO lo_salv_not_found.
+      lv_msg = lo_salv_not_found->get_text( ).
+      MESSAGE lv_msg TYPE 'E'.
+  ENDTRY.
+
+  lr_layout = go_alv->get_layout( ).
+  ls_key-report = sy-repid.
+  lr_layout->set_key( ls_key ).
+  lr_layout->set_save_restriction( if_salv_c_layout=>restrict_none ).
+
+* Display ALV grid
+  go_alv->display( ).
